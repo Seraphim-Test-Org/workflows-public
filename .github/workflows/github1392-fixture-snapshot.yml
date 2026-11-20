@@ -1,0 +1,47 @@
+name: Seraphim immutable snapshot fixture
+run-name: fixture / ${{ inputs.correlation_id }} / ${{ inputs.outcome }}
+on:
+  workflow_dispatch:
+    inputs:
+      correlation_id:
+        description: Non-secret diagnostic label; not an authoritative operation identity
+        required: true
+        type: string
+      outcome:
+        description: Synthetic completion result
+        required: true
+        default: success
+        type: choice
+        options: [success, failure]
+      delay_seconds:
+        description: Bounded delay for cancellation and await tests
+        required: true
+        default: '120'
+        type: choice
+        options: ['0', '30', '120']
+permissions: {}
+jobs:
+  fixture:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Produce synthetic result
+        env:
+          OUTCOME: ${{ inputs.outcome }}
+          DELAY_SECONDS: ${{ inputs.delay_seconds }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          case "$OUTCOME" in success|failure) ;; *) exit 2 ;; esac
+          case "$DELAY_SECONDS" in 0|30|120) ;; *) exit 2 ;; esac
+          sleep "$DELAY_SECONDS"
+          printf 'Synthetic fixture result: %s\n' "$OUTCOME" | tee "$RUNNER_TEMP/fixture-result.txt"
+          if [[ "$OUTCOME" == failure ]]; then exit 1; fi
+      - name: Upload synthetic result
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: synthetic-fixture-result
+          path: ${{ runner.temp }}/fixture-result.txt
+          if-no-files-found: ignore
+          retention-days: 1
